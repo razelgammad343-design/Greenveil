@@ -537,24 +537,29 @@ async def update_tackle_panel():
             ]
             break
     message = None
+    should_create = message_id is None
     if message_id:
         try:
             message = await channel.fetch_message(
                 message_id
             )
         except discord.NotFound:
-            message = None
+            # The panel message was actually deleted -> safe to recreate.
+            should_create = True
         except Exception as e:
+            # Transient error (rate limit, network blip, etc).
+            # Do NOT recreate the panel - just skip this update cycle.
             print(
-                f"❌ Tackle panel fetch error: {e}"
+                f"❌ Tackle panel fetch error (will retry next cycle): {e}"
             )
+            return
     ready_worlds = get_ready_tackle_worlds()
     view = (
         TackleView(ready_worlds)
         if ready_worlds
         else None
     )
-    if message is None:
+    if message is None and should_create:
         message = await channel.send(
             embed=tackle_embed(),
             view=view
@@ -569,10 +574,11 @@ async def update_tackle_panel():
                 update_message_id=True
             )
         return
-    await message.edit(
-        embed=tackle_embed(),
-        view=view
-    )
+    if message is not None:
+        await message.edit(
+            embed=tackle_embed(),
+            view=view
+        )
 async def update_science_panel():
     channel = await get_farm_channel()
     if channel is None:
@@ -591,24 +597,29 @@ async def update_science_panel():
             ]
             break
     message = None
+    should_create = message_id is None
     if message_id:
         try:
             message = await channel.fetch_message(
                 message_id
             )
         except discord.NotFound:
-            message = None
+            # The panel message was actually deleted -> safe to recreate.
+            should_create = True
         except Exception as e:
+            # Transient error (rate limit, network blip, etc).
+            # Do NOT recreate the panel - just skip this update cycle.
             print(
-                f"❌ Science panel fetch error: {e}"
+                f"❌ Science panel fetch error (will retry next cycle): {e}"
             )
+            return
     ready_worlds = get_ready_science_worlds()
     view = (
         ScienceView(ready_worlds)
         if ready_worlds
         else None
     )
-    if message is None:
+    if message is None and should_create:
         message = await channel.send(
             embed=science_embed(),
             view=view
@@ -623,10 +634,11 @@ async def update_science_panel():
                 update_message_id=True
             )
         return
-    await message.edit(
-        embed=science_embed(),
-        view=view
-    )
+    if message is not None:
+        await message.edit(
+            embed=science_embed(),
+            view=view
+        )
 async def update_farm_panels():
     await update_tackle_panel()
     await update_science_panel()
@@ -977,4 +989,3 @@ if __name__ == "__main__":
         )
 
     bot.run(token)
-
