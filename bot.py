@@ -77,7 +77,6 @@ SCIENCE_WORLDS = [
 ALL_FARM_WORLDS = TACKLE_WORLDS + SCIENCE_WORLDS
 
 intents = discord.Intents.default()
-intents.message_content = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -263,138 +262,6 @@ def clear_active_ping_id():
     """)
     db.commit()
     db.close()
-def get_spam_db():
-    conn = sqlite3.connect(
-        SPAM_DATABASE_FILE,
-        timeout=30
-    )
-    conn.row_factory = sqlite3.Row
-    return conn
-def initialize_spam_database():
-    conn = get_spam_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT name
-        FROM sqlite_master
-        WHERE type = 'table'
-        AND name = 'spam_worlds'
-    """)
-    table_exists = cursor.fetchone()
-    if not table_exists:
-        cursor.execute("""
-            CREATE TABLE spam_worlds (
-                world TEXT PRIMARY KEY,
-                end_time_2h REAL,
-                end_time_6h REAL,
-                added_by INTEGER NOT NULL
-            )
-        """)
-        print(
-            "✅ New spam_worlds table created."
-        )
-    else:
-        cursor.execute("""
-            PRAGMA table_info(spam_worlds)
-        """)
-        columns = {
-            row["name"]
-            for row in cursor.fetchall()
-        }
-        if "end_time_2h" not in columns:
-            cursor.execute("""
-                ALTER TABLE spam_worlds
-                ADD COLUMN end_time_2h REAL
-            """)
-            print(
-                "✅ Added end_time_2h column."
-            )
-        if "end_time_6h" not in columns:
-            cursor.execute("""
-                ALTER TABLE spam_worlds
-                ADD COLUMN end_time_6h REAL
-            """)
-            print(
-                "✅ Added end_time_6h column."
-            )
-        if (
-            "end_time" in columns
-            and
-            "duration_hours" in columns
-        ):
-            print(
-                "🔄 Old spam timer data detected."
-            )
-            cursor.execute("""
-                SELECT
-                    world,
-                    end_time,
-                    duration_hours
-                FROM spam_worlds
-            """)
-            old_rows = cursor.fetchall()
-            for row in old_rows:
-                world = row["world"]
-                end_time = row["end_time"]
-                duration = row["duration_hours"]
-                if end_time is None:
-                    continue
-                if duration == 2:
-                    cursor.execute("""
-                        UPDATE spam_worlds
-                        SET end_time_2h = ?
-                        WHERE world = ?
-                    """, (
-                        end_time,
-                        world
-                    ))
-                elif duration == 6:
-                    cursor.execute("""
-                        UPDATE spam_worlds
-                        SET end_time_6h = ?
-                        WHERE world = ?
-                    """, (
-                        end_time,
-                        world
-                    ))
-            print(
-                "✅ Old spam timer data migrated."
-            )
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS spam_panel (
-            id INTEGER PRIMARY KEY,
-            owner_id INTEGER,
-            panel_message_id INTEGER
-        )
-    """)
-    cursor.execute("""
-        INSERT OR IGNORE INTO spam_panel
-        (
-            id,
-            owner_id,
-            panel_message_id
-        )
-        VALUES (
-            1,
-            NULL,
-            NULL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS spam_active_ping (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            message_id INTEGER
-        )
-    """)
-    cursor.execute("""
-        INSERT OR IGNORE INTO spam_active_ping
-        (id, message_id)
-        VALUES (1, NULL)
-    """)
-    conn.commit()
-    conn.close()
-    print(
-        "✅ Spam database initialized."
-    )
 def is_owner(user_id):
     return user_id in OWNER_USER_IDS
 def format_time(seconds):
@@ -471,43 +338,54 @@ def get_world_status(world):
         f"⏳ `{format_time(remaining)}`"
     )
 def tackle_embed():
-    embed = discord.Embed(
-        title=f"{TACKLE_EMOJI} TACKLE FARM",
-        color=discord.Color.green()
-    )
     description = (
-        "Harvest the world, then click its "
-        "**WORLDNAME** button.\n\n"
+        "🌾 **Tackle Farm Harvest Timer**\n"
+        "Harvest the world first, then click its **WORLDNAME** button below "
+        "to start the 48-hour cooldown.\n\n"
+        "✅ Buttons only appear when that world is ready.\n"
+        "🔔 When a timer finishes, the bot sends one harvest ping.\n\n"
     )
+
     for world in TACKLE_WORLDS:
         description += (
-            f"🌎 **{world}** → "
-            f"{get_world_status(world)}\n"
+            f"🌎 **{world}** → {get_world_status(world)}\n"
         )
-    description += (
-        "\n⏱️ Harvest timer: **48 hours**"
-    )
-    embed.description = description
-    return embed
-def science_embed():
+
+    description += "\n⏱️ Harvest timer: **48 hours**"
+
     embed = discord.Embed(
-        title=f"{SCIENCE_EMOJI} SCIENCE STATION",
-        color=discord.Color.blue()
+        title=f"{TACKLE_EMOJI} TACKLE FARM",
+        description=description,
+        color=discord.Color.green()
     )
+    embed.set_footer(text="Harvest first → click the matching WORLDNAME button.")
+    return embed
+
+
+def science_embed():
     description = (
-        "Harvest the world, then click its "
-        "**WORLDNAME** button.\n\n"
+        "🔬 **Science Station Harvest Timer**\n"
+        "Harvest the world first, then click its **WORLDNAME** button below "
+        "to start the 12-hour cooldown.\n\n"
+        "✅ Buttons only appear when that world is ready.\n"
+        "🔔 When a timer finishes, the bot sends one harvest ping.\n\n"
     )
+
     for world in SCIENCE_WORLDS:
         description += (
-            f"🌎 **{world}** → "
-            f"{get_world_status(world)}\n"
+            f"🌎 **{world}** → {get_world_status(world)}\n"
         )
-    description += (
-        "\n⏱️ Harvest timer: **12 hours**"
+
+    description += "\n⏱️ Harvest timer: **12 hours**"
+
+    embed = discord.Embed(
+        title=f"{SCIENCE_EMOJI} SCIENCE STATION",
+        description=description,
+        color=discord.Color.blue()
     )
-    embed.description = description
+    embed.set_footer(text="Harvest first → click the matching WORLDNAME button.")
     return embed
+
 class TackleView(discord.ui.View):
     def __init__(
         self,
@@ -1090,4 +968,13 @@ async def on_ready():
 # =========================================================
 if __name__ == "__main__":
     keep_alive()
-    bot.run(os.getenv("TOKEN"))
+
+    token = os.getenv("TOKEN")
+    if not token:
+        raise RuntimeError(
+            "❌ TOKEN environment variable is missing. "
+            "Add TOKEN in Render → Environment."
+        )
+
+    bot.run(token)
+
